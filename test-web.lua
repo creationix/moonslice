@@ -1,6 +1,4 @@
 local createServer = require('continuable').tcp.createServer
-local createFiber = require('continuable').fiber.new
-local await = require('continuable').fiber.await
 local web = require('web')
 
 -- Write a simple web app
