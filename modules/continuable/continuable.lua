@@ -5,6 +5,7 @@ local function noop() end
 local uv = {}
 
 local Queue = Object:extend()
+uv.Queue = Queue
 
 function Queue:initialize()
   self.first = 1
@@ -39,6 +40,41 @@ function Queue:shift()
 
   return item
 end
+
+local ReadableStream = Object:extend()
+uv.ReadableStream = ReadableStream
+
+-- If there are more than this many buffered input chunks, readStop the source
+ReadableStream.highWaterMark = 1
+-- If there are less than this many buffered chunks, readStart the source
+ReadableStream.lowWaterMark = 1
+
+function ReadableStream:initialize()
+  self.inputQueue = Queue:new()
+  self.readerQueue = Queue:new()
+end
+
+function ReadableStream:read() return function (callback)
+  self.readerQueue:push(callback)
+  self:processReaders()
+end end
+
+function ReadableStream:processReaders()
+  while self.inputQueue.length > 0 and self.readerQueue.length > 0 do
+    local chunk = self.inputQueue:shift()
+    local reader = self.readerQueue:shift()
+    reader(nil, chunk)
+  end
+  local watermark = self.inputQueue.length - self.readerQueue.length
+  if watermark > self.highWaterMark and not self.paused then
+    self.paused = true
+    self:pause()
+  elseif watermark < self.lowWaterMark and self.paused then
+    self.paused = false
+    self:resume()
+  end
+end
+
 
 local fs = {}
 uv.fs = fs
@@ -162,18 +198,13 @@ function stream:accept(client)
   return native.accept(self, client)
 end
 
-stream.Stream = Object:extend()
+stream.Stream = ReadableStream:extend()
 
--- If there are more than this many buffered input chunks, readStop the source
-stream.Stream.highWaterMark = 1
--- If there are less than this many buffered chunks, readStart the source
-stream.Stream.lowWaterMark = 1
 
 function stream.Stream:initialize(handle)
   self.handle = handle
   -- Readable stuff
-  self.inputQueue = Queue:new()
-  self.readerQueue = Queue:new()
+  ReadableStream.initialize(self)
   uv.handle.setHandler(handle, "data", function (chunk)
     self.inputQueue:push(chunk)
     self:processReaders()
@@ -185,25 +216,12 @@ function stream.Stream:initialize(handle)
   uv.stream.readStart(handle)
 end
 
-function stream.Stream:read() return function (callback)
-  self.readerQueue:push(callback)
-  self:processReaders()
-end end
+function stream.Stream:pause()
+  uv.stream.readStop(self.handle)
+end
 
-function stream.Stream:processReaders()
-  while self.inputQueue.length > 0 and self.readerQueue.length > 0 do
-    local chunk = self.inputQueue:shift()
-    local reader = self.readerQueue:shift()
-    reader(nil, chunk)
-  end
-  local watermark = self.inputQueue.length - self.readerQueue.length
-  if watermark > self.highWaterMark and not self.paused then
-    self.paused = true
-    uv.stream.readStop(self.handle)
-  elseif watermark < self.lowWaterMark and self.paused then
-    self.paused = false
-    uv.stream.readStart(self.handle)
-  end
+function stream.Stream:resume()
+  uv.stream.readStart(self.handle)
 end
 
 function stream.Stream:write(chunk)

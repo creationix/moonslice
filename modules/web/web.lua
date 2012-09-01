@@ -1,8 +1,7 @@
-local table = require('table')
-local Tcp = require('uv').Tcp
-local iStream = require('core').iStream
 local newHttpParser = require('http_parser').new
+local table = require('table')
 local parseUrl = require('http_parser').parseUrl
+local ReadableStream = require('continuable').ReadableStream
 
 local web = {
   cleanup = require('./middleware/cleanup.lua'),
@@ -66,88 +65,98 @@ local STATUS_CODES = {
 }
 
 
-function web.createServer(host, port, onRequest)
-  if not port then error("port is a required parameter") end
-  local server = Tcp:new()
-  server:bind(host or "0.0.0.0", port)
-  server:listen(function ()
-    local client = Tcp:new()
-    local done
-    server:accept(client)
-    client:readStart()
-    local currentField, headers, url, request
-    local parser = newHttpParser("request", {
-      onMessageBegin = function ()
-        headers = {}
-      end,
-      onUrl = function (value)
-        url = parseUrl(value)
-      end,
-      onHeaderField = function (field)
-        currentField = field
-      end,
-      onHeaderValue = function (value)
-        headers[currentField:lower()] = value
-      end,
-      onHeadersComplete = function (info)
-        request = setmetatable(info, iStream.meta)
-        request.url = url
-        request.headers = headers
-        request.parser = parser
-        onRequest(request, function (statusCode, headers, body)
-          local reasonPhrase = STATUS_CODES[statusCode] or 'unknown'
-          if not reasonPhrase then error("Invalid response code " .. tostring(statusCode)) end
+function web.socketHandler(app) return function (client)
 
-          local head = {"HTTP/1.1 " .. tostring(statusCode) .. " " .. reasonPhrase .. "\r\n"}
-          for key, value in pairs(headers) do
-            table.insert(head, key .. ": " .. value .. "\r\n")
-          end
-          table.insert(head, "\r\n")
-          if type(body) == "string" then
-            table.insert(head, body)
-          end
-          client:write(table.concat(head))
-          if type(body) ~= "table" then
+  local currentField, headers, url, request, done
+  local parser = newHttpParser("request", {
+    onMessageBegin = function ()
+      headers = {}
+    end,
+    onUrl = function (value)
+      url = parseUrl(value)
+    end,
+    onHeaderField = function (field)
+      currentField = field
+    end,
+    onHeaderValue = function (value)
+      headers[currentField:lower()] = value
+    end,
+    onHeadersComplete = function (info)
+      request = setmetatable(info, ReadableStream.meta)
+      request:initialize()
+      request.url = url
+      request.headers = headers
+      request.parser = parser
+      app(request, function (statusCode, headers, body)
+        local reasonPhrase = STATUS_CODES[statusCode] or 'unknown'
+        if not reasonPhrase then error("Invalid response code " .. tostring(statusCode)) end
+
+        local head = {"HTTP/1.1 " .. tostring(statusCode) .. " " .. reasonPhrase .. "\r\n"}
+        for key, value in pairs(headers) do
+          table.insert(head, key .. ": " .. value .. "\r\n")
+        end
+        table.insert(head, "\r\n")
+        if type(body) == "string" then
+          table.insert(head, body)
+        end
+        client:write(table.concat(head))()
+        if type(body) ~= "table" then
+          done(info.should_keep_alive)
+        else
+
+          -- Assume it's a readable stream and pipe it to the client
+          local function onRead(err, chunk)
+            if err then
+              return client:write(tostring(err))(function ()
+                done(false)
+              end)
+            end
+            if chunk then
+              client:write(chunk)()
+              return body:read()(onRead)
+            end
             done(info.should_keep_alive)
-          else
-            body:on("data", function (chunk)
-              client:write(chunk)
-            end)
-            body:on("end", function ()
-              done(info.should_keep_alive)
-            end)
           end
-        end)
-      end,
-      onBody = function (chunk)
-        request:emit("data", chunk)
-      end,
-      onMessageComplete = function ()
-        request:emit("end")
-      end
-    })
-    client:on('data', function (chunk)
-      if #chunk == 0 then return end
-      local nparsed = parser:execute(chunk, 0, #chunk)
-      -- TODO: handle various cases here
-    end)
-    client:on('end', function ()
-      parser:finish()
-    end)
+          body:read()(onRead)
 
-    done = function(keepAlive)
-      if keepAlive then
-        parser:reinitialize("request")
-      else
-        client:shutdown(function ()
-          client:close()
-        end)
-      end
+        end
+      end)
+    end,
+    onBody = function (chunk)
+      request.inputQueue:push(chunk)
+      request:processReaders()
+    end,
+    onMessageComplete = function ()
+      request.inputQueue:push()
+      request:processReaders()
     end
+  })
 
+  done = function(keepAlive)
+    if keepAlive then
+      parser:reinitialize("request")
+    else
+      client:write()(function (err)
+        if (err) then error(err) end
+        -- TODO: close socket
+      end)
+    end
+  end
 
-  end)
-  return server
-end
+  -- Consume the tcp stream and send it to the HTTP parser
+  local function onRead(err, chunk)
+    if (err) then error(err) end
+    if chunk then
+      if #chunk > 0 then
+        local nparsed = parser:execute(chunk, 0, #chunk)
+        -- TODO: handle various cases here
+      end
+      return client:read()(onRead)
+    end
+    parser:finish()
+  end
+  client:read()(onRead)
+
+end end
 
 return web
