@@ -1,23 +1,13 @@
-local await = require('continuable').fiber.await
+local createServer = require('continuable').tcp.createServer
 local createFiber = require('continuable').fiber.new
-local tcp = require('continuable').tcp
+local await = require('continuable').fiber.await
 
-local server = tcp.new()
-
-tcp.bind(server, "127.0.0.1", 8080)
-tcp.listen(server, function ()
-  local client = tcp.new()
-  tcp.accept(server, client)
-
-  local client = tcp.Stream:new(client)
-
+createServer("127.0.0.1", 8080, function (client)
   createFiber(function ()
     repeat
       local chunk = await(client:read())
+      p{chunk=chunk}
       await(client:write(chunk))
     until not chunk
   end)()
-
 end)
-
-

@@ -1,7 +1,7 @@
 local native = require('uv_native')
 local Object = require('core').Object
 local coroutine = require('coroutine')
-local debug = require 'debug'
+local debug = require('debug')
 
 local function noop() end
 local uv = {}
@@ -25,12 +25,12 @@ function Queue:shift()
   if self.length == 0 then
     return
   end
-  
+
   -- Get the first item
   local item = self[self.first]
   self[self.first] = nil
   self.length = self.length - 1
-  
+
   if self.first == self.last then
     -- If it was the last item, reset the queue
     self:initialize()
@@ -204,7 +204,7 @@ function stream.Stream:processReaders()
   end
 end
 
-function stream.Stream:write(chunk) 
+function stream.Stream:write(chunk)
   if chunk then
     return uv.stream.write(self.handle, chunk)
   end
@@ -220,6 +220,16 @@ end
 
 function tcp.new()
   return native.newTcp()
+end
+
+function tcp.createServer(host, port, onConnection)
+  local server = tcp.new()
+  tcp.bind(server, host, port)
+  tcp.listen(server, function ()
+    local client = tcp.new()
+    tcp.accept(server, client)
+    onConnection(tcp.Stream:new(client))
+  end)
 end
 
 local fiber = {}
@@ -246,12 +256,12 @@ local function check(co, success, ...)
     end
     error(err)
   end
-  
+
   -- Abort on non-managed coroutines.
   if not fiber then
     return ...
   end
-    
+
   -- If the fiber is done, pass the result to the callback and cleanup.
   if not fiber.paused then
     fibers[co] = nil
@@ -260,7 +270,7 @@ local function check(co, success, ...)
     end
     return ...
   end
-  
+
   fiber.paused = false
 end
 
@@ -274,17 +284,17 @@ function fiber.new(fn, ...)
       callback = callback
     }
     fibers[co] = fiber
-    
+
     check(co, coroutine.resume(co, unpack(args, 1, nargs)))
   end
 end
 
 function fiber.wait(continuation)
-  
+
   if type(continuation) ~= "function" then
     error("Continuation must be a function.")
   end
-  
+
   -- Find out what thread we're running in.
   local co, isMain = coroutine.running()
 
@@ -308,7 +318,7 @@ function fiber.wait(continuation)
       nret = select("#", ...)
       return
     end
-    
+
     -- Callback was called we can resume the coroutine.
     -- When it yields, check for managed coroutines
     check(co, coroutine.resume(co, ...))
@@ -320,18 +330,18 @@ function fiber.wait(continuation)
   if async == false then
     return unpack(ret, 1, nret)
   end
-  
+
   -- Mark that the contination has returned.
   async = true
-  
+
   -- Mark the fiber as paused if there is one.
   if fiber then fiber.paused = true end
-  
+
   -- Suspend the coroutine and wait for the callback to be called.
   return coroutine.yield()
 end
 
--- This is a wrapper around wait that strips off the first result and 
+-- This is a wrapper around wait that strips off the first result and
 -- interprets is as an error to throw.
 function fiber.await(...)
   -- TODO: find out if there is a way to count the number of return values from
