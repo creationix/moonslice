@@ -1,4 +1,5 @@
 local newHttpParser = require('http_parser').new
+local tcp = require('continuable').tcp
 local table = require('table')
 local parseUrl = require('http_parser').parseUrl
 local ReadableStream = require('continuable').ReadableStream
@@ -138,7 +139,7 @@ function web.socketHandler(app) return function (client)
     else
       client:write()(function (err)
         if (err) then error(err) end
-        -- TODO: close socket
+        tcp.close(client.handle)()
       end)
     end
   end

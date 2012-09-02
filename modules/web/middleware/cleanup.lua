@@ -1,4 +1,4 @@
-local iStream = require('core').iStream
+local ReadableStream = require('continuable').ReadableStream
 local stringFormat = require('string').format
 local osDate = require('os').date
 
@@ -30,14 +30,20 @@ return function (app)
           headers["Transfer-Encoding"] = "chunked"
           hasTransferEncoding = true
           local originalStream = body
-          body = iStream:new()
-          originalStream:on("data", function (chunk)
-            body:emit("data", stringFormat("%X\r\n%s\r\n", #chunk, chunk))
-          end)
-          originalStream:on("end", function ()
-            body:emit("data", stringFormat("0\r\n\r\n\r\n"))
-            body:emit("end")
-          end)
+          body = { done = false }
+          function body:read() return function (callback)
+            if self.done then
+              return callback()
+            end
+            originalStream:read()(function (err, chunk)
+              if err then return callback(err) end
+              if chunk then
+                return callback(nil, stringFormat("%X\r\n%s\r\n", #chunk, chunk))
+              end
+              self.done = true
+              callback(nil, "0\r\n\r\n\r\n")
+            end)
+          end end
         end
       end
       if req.should_keep_alive and hasContentLength then

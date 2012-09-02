@@ -4,7 +4,7 @@ local pathJoin = require('path').join
 local urlParse = require('url').parse
 local getType = require('mime').getType
 local osDate = require('os').date
-local iStream = require('core').iStream
+local ReadableStream = require('continuable').ReadableStream
 
 local floor = require('math').floor
 local table = require 'table'
@@ -37,7 +37,7 @@ local function calcEtag(stat)
 end
 
 local function createDirStream(path, options)
-  local stream = iStream:new()
+  local stream = ReadableStream:new()
   fs.readdir(path)(function (err, files)
     if err then
       stream:emit("error", err)
@@ -58,8 +58,9 @@ local function createDirStream(path, options)
     end
     html[#html + 1] = '</ul></body></html>\n'
     html = table.concat(html)
-    stream:emit("data", html)
-    stream:emit("end")
+    stream.inputQueue:push(html)
+    stream.inputQueue:push()
+    stream:processReaders()
   end)
   return stream
 end

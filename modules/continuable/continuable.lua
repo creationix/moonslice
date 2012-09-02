@@ -109,6 +109,10 @@ function fs.lstat(path) return function (callback)
   native.fsLstat(path, callback or noop)
 end end
 
+function fs.readdir(path) return function (callback)
+  native.fsReaddir(path, callback or noop)
+end end
+
 fs.ReadStream = Object:extend()
 
 fs.ReadStream.chunkSize = 65536
@@ -171,7 +175,7 @@ function handle:setHandler(name, handler)
   native.setHandler(self, name, handler)
 end
 
-local stream = {}
+local stream = setmetatable({}, {__index = handle})
 uv.stream = stream
 
 function stream:write(chunk) return function (callback)
@@ -242,6 +246,10 @@ function tcp.new()
   return native.newTcp()
 end
 
+function tcp:getsockname()
+  return native.tcpGetsockname(self)
+end
+
 function tcp.createServer(host, port, onConnection)
   local server = tcp.new()
   tcp.bind(server, host, port)
@@ -250,6 +258,7 @@ function tcp.createServer(host, port, onConnection)
     tcp.accept(server, client)
     onConnection(tcp.Stream:new(client))
   end)
+  return server
 end
 
 uv.fiber = require('./fiber.lua')
