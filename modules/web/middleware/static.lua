@@ -126,7 +126,9 @@ return function (app, options)
               })
             end
 
-            headers["Content-Type"] = "text/html"
+            if code ~= 304 then
+              headers["Content-Type"] = "text/html"
+            end
             -- Create the index stream
             if not (req.method == "HEAD" or code == 304) then
               stream = createDirStream(path, options.autoIndex)
@@ -140,10 +142,12 @@ return function (app, options)
               })
             end
 
-            headers["Content-Type"] = getType(path)
-            headers["Content-Length"] = stat.size
+            if code ~= 304 then
+              headers["Content-Type"] = getType(path)
+              headers["Content-Length"] = stat.size
+            end
 
-            if req.method ~= "HEAD" then
+            if not (req.method == "HEAD" or code == 304) then
               stream = fs.ReadStream:new(fd)
             else
               fs.close(fd)()

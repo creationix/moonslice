@@ -22,7 +22,7 @@ return function (app)
       if not hasServer then
         headers['Server'] = "Luvit " .. process.version
       end
-      if not hasContentLength or hasTransferEncoding then
+      if body and (not hasContentLength) and (not hasTransferEncoding) then
         if type(body) == "string" then
           headers["Content-Length"] = #body
           hasContentLength = true
@@ -46,7 +46,7 @@ return function (app)
           end end
         end
       end
-      if req.should_keep_alive and hasContentLength then
+      if req.should_keep_alive and (hasContentLength or hasTransferEncoding or code == 304) then
         headers["Connection"] = "keep-alive"
       else
         headers["Connection"] = "close"
