@@ -13,3 +13,6 @@
 [submodule "modules/continuable"]
 	path = modules/continuable
 	url = https://github.com/luvit/continuable.git
+[submodule "modules/web-router"]
+	path = modules/web-router
+	url = https://github.com/luvit/web-router.git
