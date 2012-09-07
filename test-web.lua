@@ -16,13 +16,13 @@ local app = function (req, res)
 end
 
 -- Wrap it in some useful middleware modules
-app = web.static(app, {
+app = require('web-static')(app, {
   root = __dirname .. "/public",
   index = "index.html",
   autoIndex = true
 })
-app = web.log(app)
-app = web.cleanup(app)
+app = require('web-log')(app)
+app = require('web-autoheaders')(app)
 
 -- Serve the HTTP web app on a TCP server
-createServer("127.0.0.1", 8080, web.socketHandler(app))
+createServer("0.0.0.0", 8080, web.socketHandler(app))

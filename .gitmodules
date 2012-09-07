@@ -1,0 +1,15 @@
+[submodule "modules/web"]
+	path = modules/web
+	url = https://github.com/luvit/web.git
+[submodule "modules/web-static"]
+	path = modules/web-static
+	url = https://github.com/luvit/web-static.git
+[submodule "modules/web-log"]
+	path = modules/web-log
+	url = https://github.com/luvit/web-log.git
+[submodule "modules/web-autoheaders"]
+	path = modules/web-autoheaders
+	url = https://github.com/luvit/web-autoheaders.git
+[submodule "modules/continuable"]
+	path = modules/continuable
+	url = https://github.com/luvit/continuable.git

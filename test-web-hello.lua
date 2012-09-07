@@ -9,7 +9,7 @@ local app = function (req, res)
   }, "Hello World\n")
 end
 
-app = web.cleanup(app)
+app = require('web-autoheaders')(app)
 
 -- Serve the HTTP web app on a TCP server
 createServer("127.0.0.1", 8080, web.socketHandler(app))
