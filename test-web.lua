@@ -29,5 +29,7 @@ app = require('web-static')(app, {
 app = require('web-log')(app)
 app = require('web-autoheaders')(app)
 
+local host = process.env.IP or process.env.OPENSHIFT_INTERNAL_IP or "0.0.0.0"
+local port = process.env.PORT or 8080
 -- Serve the HTTP web app on a TCP server
-createServer("0.0.0.0", 8080, web.socketHandler(app))
+createServer(host, port, web.socketHandler(app))
