@@ -1,19 +1,26 @@
 local createServer = require('continuable').tcp.createServer
 local web = require('web')
 
+local app = require('web-router')
+
 -- Write a simple web app
 local app = function (req, res)
-  if req.url.path == "/greet" then
-    return res(200, {
-      ["Content-Type"] = "text/plain",
-      ["Content-Length"] = 12
-    }, "Hello World\n")
-  end
   res(404, {
     ["Content-Type"] = "text/plain",
     ["Content-Length"] = 10
   }, "Not Found\n")
 end
+
+app = require('web-router')(app, function (router)
+
+  router.get("/greet", function (req, res)
+    return res(200, {
+      ["Content-Type"] = "text/plain",
+      ["Content-Length"] = 12
+    }, "Hello World\n")
+  end)
+
+end)
 
 -- Wrap it in some useful middleware modules
 app = require('web-static')(app, {
